@@ -6,7 +6,7 @@ Status words: **VERIFIED** (command output proves it), **IMPLEMENTED** (written,
 
 ## Phase
 
-Milestone 0: reproduce the baseline. It closes when the repository setup PR (#6) is merged.
+Milestone 1: timed replay.
 
 ## Completed
 
@@ -16,16 +16,16 @@ Milestone 0: reproduce the baseline. It closes when the repository setup PR (#6)
 | `make test` passes on macOS | VERIFIED | Both `PASS` lines; no warnings with `-Wall -Wextra -pedantic` |
 | `make demo` matches the golden trace | VERIFIED | `diff -u fixtures/expected.csv timeline.csv` printed nothing |
 | Prototype code review | VERIFIED | Five bugs found, filed as #1–#5 |
+| Milestone 0: repository setup (#6) | VERIFIED | PR #7 merged as merge commit `74ebce4`; `git status` clean after build |
 
 ## In progress
 
-- #6 Repository setup: `.gitignore`, `docs/BRIEF.md`, this ledger
+- #8 `docs/SEMANTICS.md`: the semantics, written before any code
 
 ## Next
 
-Milestone 1: timed replay. Planned issues, one per reviewable unit:
+Milestone 1, remaining issues, one per reviewable unit:
 
-1. `docs/SEMANTICS.md`: the semantics, written before any code
 2. CMake + CTest with Debug, Release and ASan+UBSan configurations; `make test` and `make demo` kept as thin wrappers
 3. Test check macro with file and line reporting; our own seeded PRNG and shuffle (fixes #3)
 4. Timestamped event model and FIFO-aware book (fixes #2)
