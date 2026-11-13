@@ -1,0 +1,13 @@
+# Prototype Makefile outputs (root only)
+/ravel
+/ravel-test
+/timeline.csv
+
+# CMake build trees
+/build/
+
+# Generated run outputs; reproducible from scenarios/, committed results live in results/
+/runs/
+
+# macOS Finder metadata
+.DS_Store
