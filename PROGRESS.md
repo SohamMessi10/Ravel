@@ -24,9 +24,11 @@ Milestone 1: timed replay.
 
 | Milestone 1.4: timestamped int64 event model and FIFO-aware book (#14, fixes #2) | VERIFIED | Each commit passes 3/3 in all presets on its own; demo trace `IDENTICAL`; making `Book::operator==` ignore queue order made `engine_tests` fail at the FIFO check (`test.cpp:54`) |
 
+| Milestone 1.5: replay scheduler with the documented total order (#16) | VERIFIED | 4/4 CTest tests pass in all presets; demo trace `IDENTICAL`; swapping the snapshot and heartbeat ranks made `scheduler_tests` fail at the exact-tie check (`scheduler_test.cpp:26`) |
+
 ## In progress
 
-- Nothing open. Next is milestone 1.5.
+- Nothing open. Next is milestone 1.6.
 
 ## Open verification items
 
@@ -36,7 +38,6 @@ Milestone 1: timed replay.
 
 Milestone 1, remaining issues, one per reviewable unit:
 
-5. Replay clock and scheduler with a documented total order, plus timestamp-tie tests
 6. Strict JSON scenario parser (nlohmann/json via FetchContent)
 7. Trace, summary and manifest export with interval metrics
 8. Canonical timed scenario (loss at 10 ms, detection at 13 ms, recovery at 25 ms), golden test and `docs/HAND_CHECK.md`
@@ -79,6 +80,8 @@ Fixed:
 | Bounded draws use rejection (threshold `2^64 mod bound`) | `r % bound` favours small values; rejection is unbiased and still deterministic for a seed |
 | `Price`, `Qty`, `Time` are `std::int64_t`; `Event` carries source time | Exact integer comparisons, and room for scaled real-feed prices (LOBSTER's scaling gets verified in milestone 4). The exchange rejects decreasing time before changing any state, so a rejected call never consumes a sequence number. |
 | The untimed demo fixture stamps every event with time 0 | It has no timestamps; timed scenarios (milestone 1) replace it, and the golden trace does not print time |
+| The scheduler is a `std::map` keyed by (time, class, sequence, occurrence) with a defaulted `<=>` | Keys must be unique and totally ordered. A map detects duplicates and gives a defined order; `std::priority_queue` does neither. The struct's member order is the tie-break rule. |
+| Processing never goes backwards: a new key must be greater than the last processed key | Metrics come from change points in processed order, so a late insertion must not rewrite what happened at an earlier key (`SEMANTICS.md` §3) |
 | `Book` stores FIFO ladders plus an ID index; equality compares only the ladders | Queue order is part of correctness. The index is derived data, so it is excluded from equality and guarded by an "out of sync" error. |
 
 ## Test status
@@ -87,10 +90,12 @@ Fixed:
 |---|---|---|
 | CTest `engine_tests` (matcher oracle, 10,000 submissions from `SplitMix64(42)` with FIFO ladders checked after each; source time; 64-bit prices; FIFO equality; receiver cases; 1,000 shuffled duplicate deliveries) | PASS in `debug`, `release`, `asan` | Apple M3, Apple clang 17.0.0, macOS (Darwin 24.5.0), CMake 4.5.0 |
 | CTest `random_tests` (splitmix64 known answers for seeds 1234567 and 0; bounded draws; shuffle) | PASS in `debug`, `release`, `asan` | Same machine |
+| CTest `scheduler_tests` (exact ties across all six classes; key precedence; duplicate, backwards and empty errors; 20 seeded shuffles of 144 keys) | PASS in `debug`, `release`, `asan` | Same machine |
 | CTest `demo_golden_trace` (byte-compare with `fixtures/expected.csv`) | PASS in `debug`, `release`, `asan` | Same machine |
 
 ## Last verified state
 
+- 2026-11-13: branch `engine/scheduler` (#16): 4/4 CTest tests in all presets; demo trace identical; the rank-swap mutation is caught.
 - 2026-11-13: branch `engine/event-model` (#14): 3/3 CTest tests in all presets for each commit; demo trace identical. Checking FIFO ladders after every oracle submission raised `engine_tests` time from 0.8 s to 4.0 s (debug), 2.3 s to 13.7 s (asan) and 0.2 s to 0.5 s (release). That cost is in the test's own checks (rebuilding ID maps and ladders each step), not in the engine.
 - 2026-11-13: branch `test/check-and-prng` (#12): 3/3 CTest tests in `debug`, `release` and `asan`, and the shift mutation is caught.
 - 2026-11-13: branch `build/cmake` (#10) on the same machine with CMake 4.5.0 (Homebrew). `ctest` passes 2/2 in all three presets; `make test`, `make test PRESET=asan` and the `./ravel` golden diff pass from a clean build.

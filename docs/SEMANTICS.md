@@ -52,6 +52,8 @@ All runs use one event queue. Every scheduled item has a key, and items are proc
 
 Keys are unique by construction. If two items get the same key, the scheduler reports an error instead of choosing between them.
 
+Processing never goes backwards. Once an item has been processed, the scheduler rejects any new item whose key is not strictly greater than that item's key. The processed keys therefore form a strictly increasing sequence. An item at time `t` can schedule follow-up work at the same `t` only in a later class: for example, a zero-delay retransmission requested while a delivery is being processed.
+
 Why this order:
 
 - `SOURCE` first, so the reference at time `t` includes every source event with time `<= t`, and a zero-latency delivery is never processed before its source event.
