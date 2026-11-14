@@ -24,3 +24,12 @@ add_executable(ravel-test tests/test.cpp)
 
 enable_testing()
 add_test(NAME engine_tests COMMAND ravel-test)
+
+# The demo trace must stay byte-identical to the golden file.
+add_test(NAME demo_golden_trace
+  COMMAND ${CMAKE_COMMAND}
+    -DPROGRAM=$<TARGET_FILE:ravel>
+    -DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/session.txt
+    -DEXPECTED=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/expected.csv
+    -DACTUAL=${CMAKE_CURRENT_BINARY_DIR}/demo_timeline.csv
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/compare_output.cmake)
