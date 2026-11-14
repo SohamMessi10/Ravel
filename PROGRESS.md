@@ -6,7 +6,7 @@ Status words: **VERIFIED** (command output proves it), **IMPLEMENTED** (written,
 
 ## Phase
 
-Milestone 1: timed replay.
+Milestone 2: fault scenarios. Milestone 1 (timed replay) is complete.
 
 ## Completed
 
@@ -34,9 +34,12 @@ Milestone 1: timed replay.
 
 | Milestone 1.8b: canonical lost-cancel scenario, `docs/HAND_CHECK.md`, hand-check and golden tests (#25) | VERIFIED | Snapshot + replay is wrong for exactly 3 ms and withheld for exactly 12 ms; naive is wrong for 40 ms (to the observation end); trace rows 10–25 ms reviewed against the hand check; 9/9 CTest tests in all presets; appending a line to a golden file made the golden test fail |
 
+| Milestone 1.9: determinism test, two runs byte-identical including the manifest (#27) | VERIFIED | `canonical_determinism` passes in all presets (10/10 tests); a different commit in the second run made it fail on `manifest.json` |
+| **Milestone 1 complete** | VERIFIED | Every brief §6 milestone 1 acceptance item has a passing CTest test: deterministic scheduler with tie tests, scenario file, timed trace and interval metrics, the hand-calculated 3 ms / 12 ms case, and byte-identical repeated runs |
+
 ## In progress
 
-- Nothing open. Next is milestone 1.9, the last unit of milestone 1.
+- Nothing open. Next is milestone 2 (fault scenarios). Do #19 (duplicate JSON keys) before the first fault scenario.
 
 ## Open verification items
 
@@ -129,6 +132,7 @@ Checked against official docs on 2026-11-13. Reuse these instead of re-checking;
 |---|---|---|
 | CTest `engine_tests` (matcher oracle, 10,000 submissions from `SplitMix64(42)` with FIFO ladders checked after each; source time; 64-bit prices; FIFO equality; receiver cases; 1,000 shuffled duplicate deliveries) | PASS in `debug`, `release`, `asan` | Apple M3, Apple clang 17.0.0, macOS (Darwin 24.5.0), CMake 4.5.0 |
 | CTest `canonical_tests` (every number in `docs/HAND_CHECK.md`, for each policy and the control) | PASS in `debug`, `release`, `asan` | Same machine |
+| CTest `canonical_determinism` (two `ravel-run` passes, every output file byte-identical, manifest included) | PASS in `debug`, `release`, `asan` | Same machine |
 | CTest `canonical_golden_outputs` (`ravel-run` output byte-identical to the reviewed `fixtures/golden/` files) | PASS in `debug`, `release`, `asan` | Same machine |
 | CTest `export_tests` (FNV-1a vectors; timed-command errors with line numbers; exact `trace.csv` and `deliveries.csv` text; summary run, control and effect; manifest fields) | PASS in `debug`, `release`, `asan` | Same machine |
 | CTest `replay_tests` (lost cancel under each policy; lost deep bid gives latent time; 0 ms and 1 ms no-fault controls; undetected at observation end; determinism; durations sum to the window) | PASS in `debug`, `release`, `asan` | Same machine |
