@@ -81,6 +81,15 @@ add_test(NAME canonical_golden_outputs
     -DWORKDIR=${CMAKE_CURRENT_SOURCE_DIR}
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/compare_run.cmake)
 
+# Running the same scenario twice must give byte-identical outputs, manifest included.
+add_test(NAME canonical_determinism
+  COMMAND ${CMAKE_COMMAND}
+    -DRUN=$<TARGET_FILE:ravel-run>
+    -DSCENARIO=scenarios/canonical_lost_cancel.json
+    -DOUT=${CMAKE_CURRENT_BINARY_DIR}/determinism_run
+    -DWORKDIR=${CMAKE_CURRENT_SOURCE_DIR}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/run_twice.cmake)
+
 # The demo trace must stay byte-identical to the golden file.
 add_test(NAME demo_golden_trace
   COMMAND ${CMAKE_COMMAND}
