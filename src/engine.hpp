@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <deque>
+#include <initializer_list>
 #include <iterator>
 #include <map>
 #include <optional>
@@ -84,30 +85,62 @@ public:
     }
 };
 
-// Reference reconstruction deliberately scans order IDs instead of mirroring the matcher.
-struct Book {
-    std::map<Id,Order> orders;
-    bool operator==(const Book&) const = default;
-    void apply(Event e) {
-        auto o=e.order;
+// Reconstructed book. It only applies add, execute and cancel events and never matches,
+// so it stays independent of the matcher. Each price level keeps its resting orders in
+// FIFO (time priority) order, and equality compares that order (SEMANTICS.md section 5).
+class Book {
+    Ladder bids_, asks_;
+    std::map<Id, std::pair<Side,Price>> where_; // order ID -> its level; derived from the ladders
+    Ladder& ladder(Side s) {return s==Side::buy ? bids_ : asks_;}
+public:
+    bool operator==(const Book& other) const {return bids_==other.bids_ && asks_==other.asks_;}
+    void apply(const Event& e) {
+        const Order& o=e.order;
         if (e.kind == Kind::add) {
-            if (!orders.emplace(o.id,o).second) throw std::logic_error("duplicate add");
-        } else {
-            auto& old=orders.at(o.id);
-            if (old.price!=o.price || old.side!=o.side || o.qty<=0 || o.qty>old.qty ||
-                (e.kind==Kind::cancel && old.qty!=o.qty)) throw std::logic_error("invalid removal");
-            old.qty-=o.qty;
-            if (!old.qty) orders.erase(o.id);
+            if (!where_.emplace(o.id, std::pair{o.side,o.price}).second) throw std::logic_error("duplicate add");
+            ladder(o.side)[o.price].push_back(o);
+            return;
+        }
+        auto found=where_.find(o.id);
+        if (found==where_.end()) throw std::out_of_range("unknown order");
+        auto [side,price]=found->second;
+        if (side!=o.side || price!=o.price) throw std::logic_error("invalid removal");
+        auto& book_side=ladder(side);
+        auto level=book_side.find(price);
+        if (level==book_side.end()) throw std::logic_error("book index out of sync");
+        auto it=std::find_if(level->second.begin(), level->second.end(), [&](const Order& r){return r.id==o.id;});
+        if (it==level->second.end()) throw std::logic_error("book index out of sync");
+        if (o.qty<=0 || o.qty>it->qty || (e.kind==Kind::cancel && o.qty!=it->qty))
+            throw std::logic_error("invalid removal");
+        it->qty-=o.qty; // a partial execution keeps the order's place in the queue
+        if (!it->qty) {
+            level->second.erase(it);
+            if (level->second.empty()) book_side.erase(level);
+            where_.erase(found);
         }
     }
+    const Ladder& bids() const {return bids_;}
+    const Ladder& asks() const {return asks_;}
+    std::optional<Price> best_bid() const {
+        if (bids_.empty()) return {};
+        return bids_.rbegin()->first;
+    }
+    std::optional<Price> best_ask() const {
+        if (asks_.empty()) return {};
+        return asks_.begin()->first;
+    }
     std::optional<Price> spread() const {
-        std::optional<Price> bid,ask;
-        for (const auto& [id,o]:orders) {
-            if(o.side==Side::buy) bid=std::max(bid.value_or(o.price),o.price);
-            else ask=std::min(ask.value_or(o.price),o.price);
-        }
+        auto bid=best_bid(), ask=best_ask();
         if (!bid || !ask) return {};
         return *ask-*bid;
+    }
+    // Every resting order keyed by ID, for comparisons that ignore queue order.
+    std::map<Id,Order> orders() const {
+        std::map<Id,Order> all;
+        for (const Ladder* side : {&bids_, &asks_})
+            for (const auto& [price,level] : *side)
+                for (const auto& o : level) all.emplace(o.id,o);
+        return all;
     }
 };
 struct Snapshot {Seq seq; Book book;};

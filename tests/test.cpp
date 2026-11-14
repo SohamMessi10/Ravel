@@ -42,7 +42,20 @@ int main() try {
         Exchange wide; Book book;
         for(auto e:wide.submit({1,Side::sell,high,5},0)) book.apply(e);
         for(auto e:wide.submit({2,Side::buy,high-10,5},0)) book.apply(e);
-        CHECK(book.orders.at(1).price==high && book.spread()==Price{10});
+        CHECK(book.orders().at(1).price==high && book.spread()==Price{10});
+    }
+    // FIFO: queue order within a price level is part of the book (issue #2).
+    {
+        auto add=[](Seq s,Id id){return Event{s,0,Kind::add,{id,Side::buy,100,5}};};
+        Book first, second;
+        first.apply(add(1,10)); first.apply(add(2,11));
+        second.apply(add(1,11)); second.apply(add(2,10));
+        CHECK(first.orders()==second.orders());
+        CHECK(!(first==second));
+        first.apply({3,0,Kind::execute,{10,Side::buy,100,2}});
+        const auto& level=first.bids().at(100);
+        CHECK(level.size()==2 && level[0].id==10 && level[0].qty==3 && level[1].id==11);
+        CHECK(first.best_bid()==Price{100} && !first.best_ask() && !first.spread());
     }
 
     SplitMix64 rng(42);
@@ -76,7 +89,11 @@ int main() try {
         if(incoming.qty){oracle.emplace(id,incoming);expected.push_back({++sequence,time,Kind::add,incoming});}
         auto actual=tested.submit(original,time);CHECK(actual==expected);
         for(auto e:actual)reconstructed.apply(e);
-        CHECK(reconstructed.orders==oracle);
+        CHECK(reconstructed.orders()==oracle);
+        // The oracle is keyed by ID and IDs follow arrival, so its ID order is FIFO order.
+        Ladder fifo_bids, fifo_asks;
+        for(const auto& [oid,o]:oracle)(o.side==Side::buy?fifo_bids:fifo_asks)[o.price].push_back(o);
+        CHECK(reconstructed.bids()==fifo_bids && reconstructed.asks()==fifo_asks);
     }
     std::cout<<"PASS: 10000 seeded submissions matched independent price/time oracle event by event\n";
     std::cout<<"PASS: price priority, FIFO, partial fills, cancel, source time, 64-bit prices, gap buffering, snapshot catch-up, obsolete snapshot and 1000 shuffled duplicate deliveries\n";
