@@ -1,7 +1,7 @@
 #include "../src/engine.hpp"
+#include "../src/random.hpp"
 #include "check.hpp"
 #include <iostream>
-#include <random>
 using namespace ravel;
 int main() try {
     Exchange ex;
@@ -20,16 +20,16 @@ int main() try {
     at3.apply(fills[0]);rx.restore({4,at3});CHECK(!rx.fresh() && rx.applied==5);
     rx.receive(fills[2]);CHECK(rx.fresh() && rx.book==truth && rx.applied==7);
     try{rx.restore({2,{}});CHECK(false);}catch(const std::invalid_argument&){}
-    std::mt19937 rng(42);
+    SplitMix64 rng(42);
     for(int i=0;i<1000;i++){
-        std::shuffle(events.begin(),events.end(),rng);Receiver shuffled;
+        ravel::shuffle(events.begin(),events.end(),rng);Receiver shuffled;
         for(auto e:events){shuffled.receive(e);shuffled.receive(e);}
         CHECK(shuffled.fresh() && shuffled.book==truth && shuffled.applied==7);
     }
     // Independent oracle: scan every resting order. Increasing IDs give arrival order here.
     Exchange tested; Book reconstructed; std::map<Id,Order> oracle; Seq sequence=0;
     for(Id id=1;id<=10000;++id){
-        Order incoming{id,(rng()%2)?Side::buy:Side::sell,98+int(rng()%5),1+int(rng()%12)};
+        Order incoming{id,rng.below(2)?Side::buy:Side::sell,98+int(rng.below(5)),1+int(rng.below(12))};
         const Order original=incoming;
         std::vector<Event> expected;
         while(incoming.qty){
