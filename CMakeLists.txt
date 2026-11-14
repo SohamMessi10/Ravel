@@ -21,9 +21,11 @@ endif()
 
 add_executable(ravel src/main.cpp)
 add_executable(ravel-test tests/test.cpp)
+add_executable(random-test tests/random_test.cpp)
 
 enable_testing()
 add_test(NAME engine_tests COMMAND ravel-test)
+add_test(NAME random_tests COMMAND random-test)
 
 # The demo trace must stay byte-identical to the golden file.
 add_test(NAME demo_golden_trace
