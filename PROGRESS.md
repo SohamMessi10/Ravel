@@ -28,9 +28,11 @@ Milestone 1: timed replay.
 
 | Milestone 1.6: strict JSON scenario parser with nlohmann/json v3.12.0 (#18) | VERIFIED | Archive SHA-256 matched the published value; 5/5 CTest tests in all presets with no warnings; renaming the unknown-key message made `scenario_tests` fail; demo trace `IDENTICAL` |
 
+| Milestone 1.7: replay loop with interval metrics, in memory (#21) | VERIFIED | 6/6 CTest tests in all presets; hand-calculated durations match; making latent states count as correct made `replay_tests` fail at the latent check (`replay_test.cpp:74`); demo trace `IDENTICAL` |
+
 ## In progress
 
-- Nothing open. Next is milestone 1.7.
+- Nothing open. Next is milestone 1.8.
 
 ## Open verification items
 
@@ -40,8 +42,7 @@ Milestone 1: timed replay.
 
 Milestone 1, remaining issues, one per reviewable unit:
 
-7. Trace, summary and manifest export with interval metrics
-8. Canonical timed scenario (loss at 10 ms, detection at 13 ms, recovery at 25 ms), golden test and `docs/HAND_CHECK.md`
+8. Timed command input, run outputs (`trace.csv`, `deliveries.csv`, `summary.json`, `manifest.json`), the CLI runner, the canonical scenario (loss at 10 ms, detection at 13 ms, recovery at 25 ms), its golden test and `docs/HAND_CHECK.md`
 9. Determinism test: run the scenario twice and byte-compare the outputs
 
 ## Known bugs
@@ -108,6 +109,8 @@ Checked against official docs on 2026-11-13. Reuse these instead of re-checking;
 | The scheduler is a `std::map` keyed by (time, class, sequence, occurrence) with a defaulted `<=>` | Keys must be unique and totally ordered. A map detects duplicates and gives a defined order; `std::priority_queue` does neither. The struct's member order is the tie-break rule. |
 | Scenario schema v1: every field required, times in integer ns, input identified by path plus FNV-1a 64-bit hash, `faults` limited to `drop` for now | Strictness catches typos. FNV-1a detects a changed input file; it is an identity check, not a security hash. |
 | nlohmann/json pinned by URL plus `URL_HASH SHA256` and fetched as `SYSTEM`; parsing lives in one static library | A changed or tampered archive fails the configure step; the library's headers do not trip our warnings; only one file includes the JSON headers |
+| `snapshot_replay` captures the snapshot from the reference at the moment the gap is detected; it arrives after `snapshot_delay_ns`, and another is requested if a gap remains after installing it | The simplest snapshot service. Delayed and stale snapshots are milestone 3 work. |
+| Reconstruction checks rebuild the reference from sequence 1 up to the consumer's applied sequence | Simple and obviously correct, at O(n) per check. Revisit at LOBSTER scale if profiling shows it matters. |
 | Processing never goes backwards: a new key must be greater than the last processed key | Metrics come from change points in processed order, so a late insertion must not rewrite what happened at an earlier key (`SEMANTICS.md` §3) |
 | `Book` stores FIFO ladders plus an ID index; equality compares only the ladders | Queue order is part of correctness. The index is derived data, so it is excluded from equality and guarded by an "out of sync" error. |
 
@@ -116,6 +119,7 @@ Checked against official docs on 2026-11-13. Reuse these instead of re-checking;
 | Suite | Last result | Where |
 |---|---|---|
 | CTest `engine_tests` (matcher oracle, 10,000 submissions from `SplitMix64(42)` with FIFO ladders checked after each; source time; 64-bit prices; FIFO equality; receiver cases; 1,000 shuffled duplicate deliveries) | PASS in `debug`, `release`, `asan` | Apple M3, Apple clang 17.0.0, macOS (Darwin 24.5.0), CMake 4.5.0 |
+| CTest `replay_tests` (lost cancel under each policy; lost deep bid gives latent time; 0 ms and 1 ms no-fault controls; undetected at observation end; determinism; durations sum to the window) | PASS in `debug`, `release`, `asan` | Same machine |
 | CTest `scenario_tests` (valid file plus one negative case per strictness rule) | PASS in `debug`, `release`, `asan` | Same machine |
 | CTest `random_tests` (splitmix64 known answers for seeds 1234567 and 0; bounded draws; shuffle) | PASS in `debug`, `release`, `asan` | Same machine |
 | CTest `scheduler_tests` (exact ties across all six classes; key precedence; duplicate, backwards and empty errors; 20 seeded shuffles of 144 keys) | PASS in `debug`, `release`, `asan` | Same machine |
@@ -123,6 +127,7 @@ Checked against official docs on 2026-11-13. Reuse these instead of re-checking;
 
 ## Last verified state
 
+- 2026-11-13: branch `replay/metrics` (#21): 6/6 CTest tests in all presets; latent-state mutation caught.
 - 2026-11-13: branch `scenario/parser` (#18): 5/5 CTest tests in all presets; nlohmann/json archive hash verified with `shasum -a 256`.
 - 2026-11-13: branch `engine/scheduler` (#16): 4/4 CTest tests in all presets; demo trace identical; the rank-swap mutation is caught.
 - 2026-11-13: branch `engine/event-model` (#14): 3/3 CTest tests in all presets for each commit; demo trace identical. Checking FIFO ladders after every oracle submission raised `engine_tests` time from 0.8 s to 4.0 s (debug), 2.3 s to 13.7 s (asan) and 0.2 s to 0.5 s (release). That cost is in the test's own checks (rebuilding ID maps and ladders each step), not in the engine.
