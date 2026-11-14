@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <deque>
+#include <initializer_list>
+#include <iterator>
 #include <map>
 #include <optional>
 #include <set>
@@ -13,29 +15,36 @@
 namespace ravel {
 using Id = std::uint64_t;
 using Seq = std::uint64_t;
+using Price = std::int64_t; // integer ticks; the tick size is recorded per dataset
+using Qty = std::int64_t;   // integer lots
+using Time = std::int64_t;  // simulated nanoseconds since the start of the run
 enum class Side { buy, sell };
 enum class Kind { add, cancel, execute };
 struct Order {
-    Id id; Side side; int price; int qty;
+    Id id; Side side; Price price; Qty qty;
     bool operator==(const Order&) const = default;
 };
 struct Event {
-    Seq seq; Kind kind; Order order;
+    Seq seq; Time time; Kind kind; Order order;
     bool operator==(const Event&) const = default;
 };
 using Level = std::deque<Order>;
-using Ladder = std::map<int, Level>;
+using Ladder = std::map<Price, Level>;
 
 // Each submitted ID is single-use for a session. Price is integer ticks.
+// Source times must not decrease; every event carries the time of the call that produced it.
 class Exchange {
     Ladder bids_, asks_;
-    std::map<Id, std::pair<Side,int>> live_;
+    std::map<Id, std::pair<Side,Price>> live_;
     std::set<Id> used_;
     Seq seq_ = 0;
+    Time time_ = 0;
 public:
-    std::vector<Event> submit(Order o) {
+    std::vector<Event> submit(Order o, Time time) {
         if (!o.id || o.price <= 0 || o.qty <= 0 || o.qty > 1000000 || used_.contains(o.id))
             throw std::invalid_argument("invalid limit order or reused ID");
+        if (time < time_) throw std::invalid_argument("source time went backwards");
+        time_ = time;
         used_.insert(o.id);
         auto& opposite = o.side == Side::buy ? asks_ : bids_;
         std::vector<Event> events;
@@ -45,7 +54,7 @@ public:
             auto& maker = level->second.front();
             Order fill = maker;
             fill.qty = std::min(o.qty, maker.qty);
-            events.push_back({++seq_, Kind::execute, fill});
+            events.push_back({++seq_, time, Kind::execute, fill});
             o.qty -= fill.qty;
             maker.qty -= fill.qty;
             if (!maker.qty) {
@@ -57,12 +66,14 @@ public:
         if (o.qty) {
             (o.side == Side::buy ? bids_ : asks_)[o.price].push_back(o);
             live_[o.id] = {o.side, o.price};
-            events.push_back({++seq_, Kind::add, o});
+            events.push_back({++seq_, time, Kind::add, o});
         }
         return events;
     }
-    Event cancel(Id id) {
+    Event cancel(Id id, Time time) {
+        if (time < time_) throw std::invalid_argument("source time went backwards");
         auto [side,price] = live_.at(id);
+        time_ = time;
         auto& ladder = side == Side::buy ? bids_ : asks_;
         auto& level = ladder.at(price);
         auto it = std::find_if(level.begin(), level.end(), [=](Order o){return o.id == id;});
@@ -70,34 +81,66 @@ public:
         level.erase(it);
         if (level.empty()) ladder.erase(price);
         live_.erase(id);
-        return {++seq_,Kind::cancel,removed};
+        return {++seq_, time, Kind::cancel, removed};
     }
 };
 
-// Reference reconstruction deliberately scans order IDs instead of mirroring the matcher.
-struct Book {
-    std::map<Id,Order> orders;
-    bool operator==(const Book&) const = default;
-    void apply(Event e) {
-        auto o=e.order;
+// Reconstructed book. It only applies add, execute and cancel events and never matches,
+// so it stays independent of the matcher. Each price level keeps its resting orders in
+// FIFO (time priority) order, and equality compares that order (SEMANTICS.md section 5).
+class Book {
+    Ladder bids_, asks_;
+    std::map<Id, std::pair<Side,Price>> where_; // order ID -> its level; derived from the ladders
+    Ladder& ladder(Side s) {return s==Side::buy ? bids_ : asks_;}
+public:
+    bool operator==(const Book& other) const {return bids_==other.bids_ && asks_==other.asks_;}
+    void apply(const Event& e) {
+        const Order& o=e.order;
         if (e.kind == Kind::add) {
-            if (!orders.emplace(o.id,o).second) throw std::logic_error("duplicate add");
-        } else {
-            auto& old=orders.at(o.id);
-            if (old.price!=o.price || old.side!=o.side || o.qty<=0 || o.qty>old.qty ||
-                (e.kind==Kind::cancel && old.qty!=o.qty)) throw std::logic_error("invalid removal");
-            old.qty-=o.qty;
-            if (!old.qty) orders.erase(o.id);
+            if (!where_.emplace(o.id, std::pair{o.side,o.price}).second) throw std::logic_error("duplicate add");
+            ladder(o.side)[o.price].push_back(o);
+            return;
+        }
+        auto found=where_.find(o.id);
+        if (found==where_.end()) throw std::out_of_range("unknown order");
+        auto [side,price]=found->second;
+        if (side!=o.side || price!=o.price) throw std::logic_error("invalid removal");
+        auto& book_side=ladder(side);
+        auto level=book_side.find(price);
+        if (level==book_side.end()) throw std::logic_error("book index out of sync");
+        auto it=std::find_if(level->second.begin(), level->second.end(), [&](const Order& r){return r.id==o.id;});
+        if (it==level->second.end()) throw std::logic_error("book index out of sync");
+        if (o.qty<=0 || o.qty>it->qty || (e.kind==Kind::cancel && o.qty!=it->qty))
+            throw std::logic_error("invalid removal");
+        it->qty-=o.qty; // a partial execution keeps the order's place in the queue
+        if (!it->qty) {
+            level->second.erase(it);
+            if (level->second.empty()) book_side.erase(level);
+            where_.erase(found);
         }
     }
-    std::optional<int> spread() const {
-        std::optional<int> bid,ask;
-        for (const auto& [id,o]:orders) {
-            if(o.side==Side::buy) bid=std::max(bid.value_or(o.price),o.price);
-            else ask=std::min(ask.value_or(o.price),o.price);
-        }
+    const Ladder& bids() const {return bids_;}
+    const Ladder& asks() const {return asks_;}
+    std::optional<Price> best_bid() const {
+        if (bids_.empty()) return {};
+        return bids_.rbegin()->first;
+    }
+    std::optional<Price> best_ask() const {
+        if (asks_.empty()) return {};
+        return asks_.begin()->first;
+    }
+    std::optional<Price> spread() const {
+        auto bid=best_bid(), ask=best_ask();
         if (!bid || !ask) return {};
         return *ask-*bid;
+    }
+    // Every resting order keyed by ID, for comparisons that ignore queue order.
+    std::map<Id,Order> orders() const {
+        std::map<Id,Order> all;
+        for (const Ladder* side : {&bids_, &asks_})
+            for (const auto& [price,level] : *side)
+                for (const auto& o : level) all.emplace(o.id,o);
+        return all;
     }
 };
 struct Snapshot {Seq seq; Book book;};

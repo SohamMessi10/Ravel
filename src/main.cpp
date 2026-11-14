@@ -11,12 +11,15 @@ int main(int argc,char** argv) try {
     std::ifstream file(argv[1]); if(!file) throw std::runtime_error("cannot open fixture");
     Exchange ex; std::vector<Event> tape;
     std::string line;
+    // The session fixture has no timestamps, so every event gets source time 0.
+    // Timed scenarios replace this in milestone 1.
+    const Time untimed=0;
     while(std::getline(file,line)){
-        std::istringstream row(line); char side; Id id; int price,qty;
+        std::istringstream row(line); char side; Id id; Price price; Qty qty;
         if(!(row>>side>>id)) throw std::runtime_error("invalid command");
-        if(side=='C') tape.push_back(ex.cancel(id));
+        if(side=='C') tape.push_back(ex.cancel(id,untimed));
         else if((side=='B'||side=='S') && row>>price>>qty) {
-            auto events=ex.submit({id,side=='B'?Side::buy:Side::sell,price,qty});
+            auto events=ex.submit({id,side=='B'?Side::buy:Side::sell,price,qty},untimed);
             tape.insert(tape.end(),events.begin(),events.end());
         } else throw std::runtime_error("invalid command");
         if(row>>line) throw std::runtime_error("unexpected field");
