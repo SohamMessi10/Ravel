@@ -17,16 +17,17 @@ Milestone 1: timed replay.
 | `make demo` matches the golden trace | VERIFIED | `diff -u fixtures/expected.csv timeline.csv` printed nothing |
 | Prototype code review | VERIFIED | Five bugs found, filed as #1–#5 |
 | Milestone 0: repository setup (#6) | VERIFIED | PR #7 merged as merge commit `74ebce4`; `git status` clean after build |
+| Milestone 1.1: `docs/SEMANTICS.md` (#8) | VERIFIED | PR #9 merged as merge commit `206ae4c` |
+| Milestone 1.2: CMake + CTest build (#10) | VERIFIED | 2/2 CTest tests pass in the `debug`, `release` and `asan` presets; ASan+UBSan flags confirmed in compile and link commands; the golden-test script returns exit 1 on a deliberately wrong file; `make test` and `make test PRESET=asan` pass from a clean build; `./ravel` output identical to `fixtures/expected.csv` |
 
 ## In progress
 
-- #8 `docs/SEMANTICS.md`: the semantics, written before any code
+- Nothing open. Next is milestone 1.3.
 
 ## Next
 
 Milestone 1, remaining issues, one per reviewable unit:
 
-2. CMake + CTest with Debug, Release and ASan+UBSan configurations; `make test` and `make demo` kept as thin wrappers
 3. Test check macro with file and line reporting; our own seeded PRNG and shuffle (fixes #3)
 4. Timestamped event model and FIFO-aware book (fixes #2)
 5. Replay clock and scheduler with a documented total order, plus timestamp-tie tests
@@ -58,14 +59,19 @@ Milestone 1, remaining issues, one per reviewable unit:
 | `runs/` is generated and ignored; committed results go in `results/` | Runs are reproducible from scenarios, and only published results need to be versioned |
 | LOBSTER for historical data, with simulated delivery sequences labelled as simulated | LOBSTER has no packet boundaries or transport sequences, so we make no packet-loss claims about the real feed |
 | Work flows issue, branch, small commits, PR, merge commit (squash and rebase disabled) | Each building commit stays on `main` with its reasoning; PRs stay reviewable |
+| CMake presets (schema 6, CMake 3.25 or later): `debug`, `release`, `asan`, each building into `build/<preset>` | One command per configuration, locally and in CI; 3.25 is the minimum CMake that reads schema 6 |
+| ASan+UBSan uses `-fno-sanitize-recover=undefined` | Otherwise UBSan prints a report and continues, and the test still passes |
+| The Release preset uses CMake's default `-O3 -DNDEBUG`; the prototype Makefile used `-O2` | The code has no `assert`s, so `NDEBUG` changes nothing today. Benchmarks (milestone 5) record the exact flags. |
+| The demo golden test byte-compares with `cmake -E compare_files`, without `--ignore-eol` | Byte-identical output is the requirement, so line endings count |
 
 ## Test status
 
 | Suite | Last result | Where |
 |---|---|---|
-| `make test` (matcher oracle, 10,000 submissions; receiver cases; 1,000 shuffled duplicate deliveries) | PASS | Apple M3, Apple clang 17.0.0, macOS (Darwin 24.5.0) |
-| Demo golden trace (`fixtures/expected.csv`) | IDENTICAL | Same machine |
+| CTest `engine_tests` (matcher oracle, 10,000 submissions; receiver cases; 1,000 shuffled duplicate deliveries) | PASS in `debug`, `release`, `asan` | Apple M3, Apple clang 17.0.0, macOS (Darwin 24.5.0), CMake 4.5.0 |
+| CTest `demo_golden_trace` (byte-compare with `fixtures/expected.csv`) | PASS in `debug`, `release`, `asan` | Same machine |
 
 ## Last verified state
 
+- 2026-11-13: branch `build/cmake` (#10) on the same machine with CMake 4.5.0 (Homebrew). `ctest` passes 2/2 in all three presets; `make test`, `make test PRESET=asan` and the `./ravel` golden diff pass from a clean build.
 - 2026-11-13: commit `dbd67cd` on Apple M3, Apple clang 17.0.0 (clang-1700.0.13.5), arm64-apple-darwin24.5.0, GNU Make 3.81, with `-std=c++20 -O2 -Wall -Wextra -pedantic`. Tests pass, the demo output is byte-identical to the golden trace, and there were no compiler warnings.
