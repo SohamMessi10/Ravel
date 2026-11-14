@@ -32,9 +32,11 @@ Milestone 1: timed replay.
 
 | Milestone 1.8a: timed command input, run outputs and the `ravel-run` CLI (#23) | VERIFIED | 7/7 CTest tests in all presets; changing the FNV prime made `export_tests` fail; demo trace `IDENTICAL` |
 
+| Milestone 1.8b: canonical lost-cancel scenario, `docs/HAND_CHECK.md`, hand-check and golden tests (#25) | VERIFIED | Snapshot + replay is wrong for exactly 3 ms and withheld for exactly 12 ms; naive is wrong for 40 ms (to the observation end); trace rows 10–25 ms reviewed against the hand check; 9/9 CTest tests in all presets; appending a line to a golden file made the golden test fail |
+
 ## In progress
 
-- Nothing open. Next is milestone 1.8b.
+- Nothing open. Next is milestone 1.9, the last unit of milestone 1.
 
 ## Open verification items
 
@@ -44,7 +46,6 @@ Milestone 1: timed replay.
 
 Milestone 1, remaining issues, one per reviewable unit:
 
-8. (1.8b) The canonical scenario (loss at 10 ms, detection at 13 ms, recovery at 25 ms), its golden test and `docs/HAND_CHECK.md`
 9. Determinism test: run the scenario twice and byte-compare the outputs
 
 ## Known bugs
@@ -114,6 +115,8 @@ Checked against official docs on 2026-11-13. Reuse these instead of re-checking;
 | Scenario schema v1: every field required, times in integer ns, input identified by path plus FNV-1a 64-bit hash, `faults` limited to `drop` for now | Strictness catches typos. FNV-1a detects a changed input file; it is an identity check, not a security hash. |
 | nlohmann/json pinned by URL plus `URL_HASH SHA256` and fetched as `SYSTEM`; parsing lives in one static library | A changed or tampered archive fails the configure step; the library's headers do not trip our warnings; only one file includes the JSON headers |
 | `snapshot_replay` captures the snapshot from the reference at the moment the gap is detected; it arrives after `snapshot_delay_ns`, and another is requested if a gap remains after installing it | The simplest snapshot service. Delayed and stale snapshots are milestone 3 work. |
+| Golden outputs (`fixtures/golden/`) cover `trace.csv`, `deliveries.csv` and `summary.json`, but not `manifest.json` | The manifest records the build, which differs between presets. The golden files were generated once, then checked against `docs/HAND_CHECK.md` and an independent assertion test before being committed. |
+| In the canonical timed run, the snapshot covers sequences 1–7 (captured at detection, 13 ms) | The prototype hard-coded "through 8". With timing explicit, capture at detection is the defined behaviour; `docs/HAND_CHECK.md` explains the difference. |
 | `ravel-run` takes the git commit as an argument, and resolves scenario paths relative to the current directory (the repository root) | A commit baked in at configure time goes stale after the next commit. Run outputs never contain absolute paths. |
 | Every policy's run is paired with a control: the same scenario with the faults cleared. `summary.json` reports run, control and `effect_vs_control` | The brief requires each fault's effect to be measured against a no-fault run with the same latency |
 | Reconstruction checks rebuild the reference from sequence 1 up to the consumer's applied sequence | Simple and obviously correct, at O(n) per check. Revisit at LOBSTER scale if profiling shows it matters. |
@@ -125,6 +128,8 @@ Checked against official docs on 2026-11-13. Reuse these instead of re-checking;
 | Suite | Last result | Where |
 |---|---|---|
 | CTest `engine_tests` (matcher oracle, 10,000 submissions from `SplitMix64(42)` with FIFO ladders checked after each; source time; 64-bit prices; FIFO equality; receiver cases; 1,000 shuffled duplicate deliveries) | PASS in `debug`, `release`, `asan` | Apple M3, Apple clang 17.0.0, macOS (Darwin 24.5.0), CMake 4.5.0 |
+| CTest `canonical_tests` (every number in `docs/HAND_CHECK.md`, for each policy and the control) | PASS in `debug`, `release`, `asan` | Same machine |
+| CTest `canonical_golden_outputs` (`ravel-run` output byte-identical to the reviewed `fixtures/golden/` files) | PASS in `debug`, `release`, `asan` | Same machine |
 | CTest `export_tests` (FNV-1a vectors; timed-command errors with line numbers; exact `trace.csv` and `deliveries.csv` text; summary run, control and effect; manifest fields) | PASS in `debug`, `release`, `asan` | Same machine |
 | CTest `replay_tests` (lost cancel under each policy; lost deep bid gives latent time; 0 ms and 1 ms no-fault controls; undetected at observation end; determinism; durations sum to the window) | PASS in `debug`, `release`, `asan` | Same machine |
 | CTest `scenario_tests` (valid file plus one negative case per strictness rule) | PASS in `debug`, `release`, `asan` | Same machine |

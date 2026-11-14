@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "name": "canonical_lost_cancel",
+  "input": {"path": "fixtures/canonical.txt", "fnv1a64": "d0bf056e89659723"},
+  "seed": 0,
+  "transit_latency_ns": 0,
+  "faults": [{"type": "drop", "seq": 6}],
+  "policies": ["naive", "gap_aware", "snapshot_replay"],
+  "retransmit_delay_ns": 0,
+  "snapshot_delay_ns": 12000000,
+  "buffer_capacity": 4096,
+  "heartbeat_interval_ns": 0,
+  "observation_end_ns": 50000000
+}
