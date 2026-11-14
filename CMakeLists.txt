@@ -39,11 +39,16 @@ target_link_libraries(ravel-scenario PRIVATE nlohmann_json::nlohmann_json)
 add_executable(scenario-test tests/scenario_test.cpp)
 target_link_libraries(scenario-test PRIVATE ravel-scenario nlohmann_json::nlohmann_json)
 
+add_library(ravel-replay STATIC src/replay.cpp)
+add_executable(replay-test tests/replay_test.cpp)
+target_link_libraries(replay-test PRIVATE ravel-replay)
+
 enable_testing()
 add_test(NAME engine_tests COMMAND ravel-test)
 add_test(NAME random_tests COMMAND random-test)
 add_test(NAME scheduler_tests COMMAND scheduler-test)
 add_test(NAME scenario_tests COMMAND scenario-test)
+add_test(NAME replay_tests COMMAND replay-test)
 
 # The demo trace must stay byte-identical to the golden file.
 add_test(NAME demo_golden_trace
