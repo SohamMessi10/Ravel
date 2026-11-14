@@ -20,15 +20,20 @@ Milestone 1: timed replay.
 | Milestone 1.1: `docs/SEMANTICS.md` (#8) | VERIFIED | PR #9 merged as merge commit `206ae4c` |
 | Milestone 1.2: CMake + CTest build (#10) | VERIFIED | 2/2 CTest tests pass in the `debug`, `release` and `asan` presets; ASan+UBSan flags confirmed in compile and link commands; the golden-test script returns exit 1 on a deliberately wrong file; `make test` and `make test PRESET=asan` pass from a clean build; `./ravel` output identical to `fixtures/expected.csv` |
 
+| Milestone 1.3: `CHECK` macro and splitmix64 PRNG (#12, fixes #3) | VERIFIED | 3/3 CTest tests pass in all presets; a deliberately failing `CHECK` printed file, line and expression and exited 1; mutating one shift (30 to 29) made `random_tests` fail at `random_test.cpp:20`; `grep` finds no `std::` random engines, distributions or `std::shuffle` in `src` or `tests` |
+
 ## In progress
 
-- Nothing open. Next is milestone 1.3.
+- Nothing open. Next is milestone 1.4.
+
+## Open verification items
+
+- The PR #11 description says commit `0c522bd` was tested on its own (`make test` 1/1), but that output was never pasted. This is not verified until it is run: `git switch --detach 0c522bd && make clean && make test`, then `git switch main`.
 
 ## Next
 
 Milestone 1, remaining issues, one per reviewable unit:
 
-3. Test check macro with file and line reporting; our own seeded PRNG and shuffle (fixes #3)
 4. Timestamped event model and FIFO-aware book (fixes #2)
 5. Replay clock and scheduler with a documented total order, plus timestamp-tie tests
 6. Strict JSON scenario parser (nlohmann/json via FetchContent)
@@ -42,9 +47,14 @@ Milestone 1, remaining issues, one per reviewable unit:
 |---|---|---|
 | #1 | `Receiver` silently drops out-of-order events when its 4,096-entry buffer is full; the consumer then stays withheld with no visible cause | Milestone 3 |
 | #2 | `Book` keys orders by ID and does not record FIFO order within a price level | Milestone 1 |
-| #3 | The test's `std::shuffle` calls consume an implementation-defined number of draws, so the 10,000-order workload differs between libc++ and libstdc++ | Milestone 1 |
 | #4 | The naive consumer's `Book::apply` throws on execute or cancel of an order it never saw | Milestone 2 |
 | #5 | `Receiver::restore` throws on a snapshot older than `applied`; overlapping repairs need it ignored and counted | Milestone 3 |
+
+Fixed:
+
+| Issue | Summary | Fixed by |
+|---|---|---|
+| #3 | The seeded test workload depended on `std::shuffle`'s implementation-defined draw count | Milestone 1.3: `ravel::SplitMix64` and `ravel::shuffle` (#12) |
 
 ## Decisions
 
@@ -63,15 +73,20 @@ Milestone 1, remaining issues, one per reviewable unit:
 | ASan+UBSan uses `-fno-sanitize-recover=undefined` | Otherwise UBSan prints a report and continues, and the test still passes |
 | The Release preset uses CMake's default `-O3 -DNDEBUG`; the prototype Makefile used `-O2` | The code has no `assert`s, so `NDEBUG` changes nothing today. Benchmarks (milestone 5) record the exact flags. |
 | The demo golden test byte-compares with `cmake -E compare_files`, without `--ignore-eol` | Byte-identical output is the requirement, so line endings count |
+| No test framework; a `CHECK` macro plus one CTest test per executable | The prototype's single-binary setup was adequate once failures report file, line and expression. A framework would be a dependency without a current need. |
+| splitmix64 as the only PRNG, written from Vigna's public-domain reference | 64-bit state, passes BigCrush, a few lines, and fully specified by unsigned arithmetic. Known-answer tests use values printed by the compiled reference, cross-checked with Rosetta Code. |
+| Bounded draws use rejection (threshold `2^64 mod bound`) | `r % bound` favours small values; rejection is unbiased and still deterministic for a seed |
 
 ## Test status
 
 | Suite | Last result | Where |
 |---|---|---|
-| CTest `engine_tests` (matcher oracle, 10,000 submissions; receiver cases; 1,000 shuffled duplicate deliveries) | PASS in `debug`, `release`, `asan` | Apple M3, Apple clang 17.0.0, macOS (Darwin 24.5.0), CMake 4.5.0 |
+| CTest `engine_tests` (matcher oracle, 10,000 submissions from `SplitMix64(42)`; receiver cases; 1,000 shuffled duplicate deliveries) | PASS in `debug`, `release`, `asan` | Apple M3, Apple clang 17.0.0, macOS (Darwin 24.5.0), CMake 4.5.0 |
+| CTest `random_tests` (splitmix64 known answers for seeds 1234567 and 0; bounded draws; shuffle) | PASS in `debug`, `release`, `asan` | Same machine |
 | CTest `demo_golden_trace` (byte-compare with `fixtures/expected.csv`) | PASS in `debug`, `release`, `asan` | Same machine |
 
 ## Last verified state
 
+- 2026-11-13: branch `test/check-and-prng` (#12): 3/3 CTest tests in `debug`, `release` and `asan`, and the shift mutation is caught.
 - 2026-11-13: branch `build/cmake` (#10) on the same machine with CMake 4.5.0 (Homebrew). `ctest` passes 2/2 in all three presets; `make test`, `make test PRESET=asan` and the `./ravel` golden diff pass from a clean build.
 - 2026-11-13: commit `dbd67cd` on Apple M3, Apple clang 17.0.0 (clang-1700.0.13.5), arm64-apple-darwin24.5.0, GNU Make 3.81, with `-std=c++20 -O2 -Wall -Wextra -pedantic`. Tests pass, the demo output is byte-identical to the golden trace, and there were no compiler warnings.
