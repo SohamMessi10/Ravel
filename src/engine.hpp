@@ -145,7 +145,7 @@ public:
 };
 struct Snapshot {Seq seq; Book book;};
 class Receiver {
-    static constexpr std::size_t capacity=4096;
+    std::size_t capacity_;
     std::map<Seq,Event> pending_;
     Seq high_=0;
     void drain() {
@@ -156,15 +156,17 @@ class Receiver {
         }
     }
 public:
+    explicit Receiver(std::size_t capacity=4096) : capacity_(capacity) {}
     Book book;
     Seq applied=0;
     bool fresh() const {return applied==high_;}
+    Seq observed() const {return high_;}
     void receive(Event e) {
         if (!e.seq) throw std::invalid_argument("zero sequence");
         if (e.seq<=applied) return;
         high_=std::max(high_,e.seq);
         if(e.seq==applied+1) {book.apply(e); ++applied; drain(); return;}
-        if (pending_.size()<capacity || pending_.contains(e.seq)) {
+        if (pending_.size()<capacity_ || pending_.contains(e.seq)) {
             auto [it,inserted]=pending_.emplace(e.seq,e);
             if (!inserted && !(it->second==e)) throw std::logic_error("conflicting sequence");
         }
