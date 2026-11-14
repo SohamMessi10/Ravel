@@ -2,7 +2,9 @@
 A C++20 market replay and recovery engine. How long can a missing feed update leave an apparently valid spread wrong, and when can a consumer trust it again?
 
 ## Run on macOS or Linux
-From this directory, run `make test`, then `make demo`. Requires a C++20 compiler and Make. To save machine-readable output: `make ravel && ./ravel fixtures/session.txt > timeline.csv`.
+Requires CMake 3.25 or later, a C++20 compiler and Make. From this directory, run `make test`, then `make demo`. To save machine-readable output: `make ravel && ./ravel fixtures/session.txt > timeline.csv`.
+
+The `make` targets are thin wrappers around CMake presets (`debug`, `release`, `asan`). Choose one with `PRESET`, for example `make test PRESET=asan` for AddressSanitizer and UndefinedBehaviorSanitizer. Or use CMake directly: `cmake --preset release && cmake --build --preset release && ctest --preset release`.
 
 ## Experiment
 One instrument, integer ticks and lots. A limit-order matcher consumes buys, sells and full cancellations. Marketable orders execute against resting orders at maker prices in price/time order. Unfilled quantity rests. IDs are session-unique; incoming quantities must be positive and at most one million lots.

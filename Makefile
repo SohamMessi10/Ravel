@@ -1,12 +1,25 @@
-CXXFLAGS = -std=c++20 -O2 -Wall -Wextra -pedantic
-.PHONY: test demo clean
-ravel: src/main.cpp src/engine.hpp
-	$(CXX) $(CXXFLAGS) src/main.cpp -o ravel
-ravel-test: tests/test.cpp src/engine.hpp
-	$(CXX) $(CXXFLAGS) tests/test.cpp -o ravel-test
-test: ravel-test
-	./ravel-test
-demo: ravel
-	./ravel fixtures/session.txt
+# Thin wrappers around the CMake presets. CMake is the real build.
+# Choose a configuration with PRESET=debug|release|asan (default: release).
+PRESET ?= release
+BUILD_DIR := build/$(PRESET)
+
+.DEFAULT_GOAL := build
+.PHONY: build test demo ravel clean
+
+$(BUILD_DIR)/CMakeCache.txt:
+	cmake --preset $(PRESET)
+
+build: $(BUILD_DIR)/CMakeCache.txt
+	cmake --build --preset $(PRESET)
+
+test: build
+	ctest --preset $(PRESET)
+
+demo: build
+	$(BUILD_DIR)/ravel fixtures/session.txt
+
+ravel: build
+	cmake -E copy $(BUILD_DIR)/ravel ravel
+
 clean:
-	$(RM) ravel ravel-test
+	$(RM) -r build ravel ravel-test
