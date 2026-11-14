@@ -1,0 +1,61 @@
+{
+  "control": {
+    "correct_ns": 50000000,
+    "first_wrong_ns": null,
+    "gaps": [],
+    "latent_ns": 0,
+    "max_spread_error_ticks": 0,
+    "one_sided_ns": 3000000,
+    "publishing_ns": 47000000,
+    "reconstruction_checks": 0,
+    "reconstruction_failures": 0,
+    "spread_defined_mismatch_ns": 0,
+    "spread_error_tick_ns": 0,
+    "unprocessed_items": 0,
+    "withheld_ns": 0,
+    "wrong_ns": 0
+  },
+  "effect_vs_control": {
+    "correct_ns": -40000000,
+    "latent_ns": 0,
+    "one_sided_ns": 0,
+    "publishing_ns": -37000000,
+    "withheld_ns": 37000000,
+    "wrong_ns": 3000000
+  },
+  "observation_end_ns": 50000000,
+  "policy": "gap_aware",
+  "run": {
+    "correct_ns": 10000000,
+    "first_wrong_ns": 10000000,
+    "gaps": [
+      {
+        "detected_ns": 13000000,
+        "detection_delay_ns": 3000000,
+        "outcome": "UNRESOLVED_AT_END",
+        "recovery_time_ns": null,
+        "seq": 6,
+        "source_time_ns": 10000000,
+        "trusted_ns": null,
+        "wrong_ns": 10000000
+      }
+    ],
+    "latent_ns": 0,
+    "max_spread_error_ticks": 1,
+    "one_sided_ns": 3000000,
+    "publishing_ns": 10000000,
+    "reconstruction_checks": 0,
+    "reconstruction_failures": 0,
+    "spread_defined_mismatch_ns": 0,
+    "spread_error_tick_ns": 3000000,
+    "unprocessed_items": 0,
+    "withheld_ns": 37000000,
+    "wrong_ns": 3000000
+  },
+  "scenario": "canonical_lost_cancel",
+  "transit_latency_ns": 0,
+  "units": {
+    "price": "ticks",
+    "time": "ns"
+  }
+}

@@ -56,6 +56,8 @@ target_link_libraries(ravel-io PRIVATE nlohmann_json::nlohmann_json)
 add_executable(ravel-run src/run_main.cpp)
 target_include_directories(ravel-run PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(ravel-run PRIVATE ravel-io ravel-replay ravel-scenario)
+add_executable(canonical-test tests/canonical_test.cpp)
+target_link_libraries(canonical-test PRIVATE ravel-io ravel-replay ravel-scenario)
 add_executable(export-test tests/export_test.cpp)
 target_link_libraries(export-test PRIVATE ravel-io ravel-replay nlohmann_json::nlohmann_json)
 
@@ -66,6 +68,18 @@ add_test(NAME scheduler_tests COMMAND scheduler-test)
 add_test(NAME scenario_tests COMMAND scenario-test)
 add_test(NAME replay_tests COMMAND replay-test)
 add_test(NAME export_tests COMMAND export-test)
+add_test(NAME canonical_tests COMMAND canonical-test ${CMAKE_CURRENT_SOURCE_DIR})
+
+# The canonical run's outputs must stay byte-identical to the reviewed golden copies.
+add_test(NAME canonical_golden_outputs
+  COMMAND ${CMAKE_COMMAND}
+    -DRUN=$<TARGET_FILE:ravel-run>
+    -DSCENARIO=scenarios/canonical_lost_cancel.json
+    -DNAME=canonical_lost_cancel
+    -DOUT=${CMAKE_CURRENT_BINARY_DIR}/golden_run
+    -DGOLDEN=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/golden/canonical_lost_cancel
+    -DWORKDIR=${CMAKE_CURRENT_SOURCE_DIR}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/compare_run.cmake)
 
 # The demo trace must stay byte-identical to the golden file.
 add_test(NAME demo_golden_trace
