@@ -5,13 +5,13 @@
 using namespace ravel;
 int main() try {
     Exchange ex;
-    auto a=ex.submit({1,Side::sell,101,3}).at(0);
-    auto b=ex.submit({2,Side::sell,101,4}).at(0);
-    auto c=ex.submit({3,Side::sell,100,2}).at(0);
-    auto fills=ex.submit({4,Side::buy,102,7});
+    auto a=ex.submit({1,Side::sell,101,3},0).at(0);
+    auto b=ex.submit({2,Side::sell,101,4},0).at(0);
+    auto c=ex.submit({3,Side::sell,100,2},0).at(0);
+    auto fills=ex.submit({4,Side::buy,102,7},0);
     CHECK(fills.size()==3 && fills[0].order.id==3 && fills[1].order.id==1 &&
           fills[2].order.id==2 && fills[2].order.qty==2);
-    auto cancel=ex.cancel(2);CHECK(cancel.order.qty==2);
+    auto cancel=ex.cancel(2,0);CHECK(cancel.order.qty==2);
     Book truth;Receiver rx;
     std::vector<Event> events{a,b,c};events.insert(events.end(),fills.begin(),fills.end());events.push_back(cancel);
     for(auto e:events) truth.apply(e);
@@ -20,6 +20,31 @@ int main() try {
     at3.apply(fills[0]);rx.restore({4,at3});CHECK(!rx.fresh() && rx.applied==5);
     rx.receive(fills[2]);CHECK(rx.fresh() && rx.book==truth && rx.applied==7);
     try{rx.restore({2,{}});CHECK(false);}catch(const std::invalid_argument&){}
+
+    // Source time: carried on every event, never decreasing, and a rejected call changes nothing.
+    {
+        Exchange clock;
+        CHECK(clock.submit({1,Side::buy,100,1},5).at(0).time==5);
+        bool threw=false;
+        try{clock.submit({2,Side::buy,100,1},4);}catch(const std::invalid_argument&){threw=true;}
+        CHECK(threw);
+        auto same=clock.submit({2,Side::buy,100,1},5);
+        CHECK(same.at(0).seq==2 && same.at(0).time==5);
+        threw=false;
+        try{clock.cancel(1,4);}catch(const std::invalid_argument&){threw=true;}
+        CHECK(threw);
+        auto later=clock.cancel(1,9);
+        CHECK(later.seq==3 && later.time==9 && later.order.id==1);
+    }
+    // Prices and quantities are 64-bit: values beyond the 32-bit range survive a round trip.
+    {
+        const Price high=3'000'000'000;
+        Exchange wide; Book book;
+        for(auto e:wide.submit({1,Side::sell,high,5},0)) book.apply(e);
+        for(auto e:wide.submit({2,Side::buy,high-10,5},0)) book.apply(e);
+        CHECK(book.orders.at(1).price==high && book.spread()==Price{10});
+    }
+
     SplitMix64 rng(42);
     for(int i=0;i<1000;i++){
         ravel::shuffle(events.begin(),events.end(),rng);Receiver shuffled;
@@ -27,9 +52,11 @@ int main() try {
         CHECK(shuffled.fresh() && shuffled.book==truth && shuffled.applied==7);
     }
     // Independent oracle: scan every resting order. Increasing IDs give arrival order here.
+    // Each submission gets source time = its ID in nanoseconds.
     Exchange tested; Book reconstructed; std::map<Id,Order> oracle; Seq sequence=0;
     for(Id id=1;id<=10000;++id){
-        Order incoming{id,rng.below(2)?Side::buy:Side::sell,98+int(rng.below(5)),1+int(rng.below(12))};
+        const Time time=static_cast<Time>(id);
+        Order incoming{id,rng.below(2)?Side::buy:Side::sell,98+Price(rng.below(5)),1+Qty(rng.below(12))};
         const Order original=incoming;
         std::vector<Event> expected;
         while(incoming.qty){
@@ -42,15 +69,15 @@ int main() try {
             }
             if(best==oracle.end())break;
             Order fill=best->second;fill.qty=std::min(fill.qty,incoming.qty);
-            expected.push_back({++sequence,Kind::execute,fill});
+            expected.push_back({++sequence,time,Kind::execute,fill});
             incoming.qty-=fill.qty;best->second.qty-=fill.qty;
             if(!best->second.qty)oracle.erase(best);
         }
-        if(incoming.qty){oracle.emplace(id,incoming);expected.push_back({++sequence,Kind::add,incoming});}
-        auto actual=tested.submit(original);CHECK(actual==expected);
+        if(incoming.qty){oracle.emplace(id,incoming);expected.push_back({++sequence,time,Kind::add,incoming});}
+        auto actual=tested.submit(original,time);CHECK(actual==expected);
         for(auto e:actual)reconstructed.apply(e);
         CHECK(reconstructed.orders==oracle);
     }
     std::cout<<"PASS: 10000 seeded submissions matched independent price/time oracle event by event\n";
-    std::cout<<"PASS: price priority, FIFO, partial fills, cancel, gap buffering, snapshot catch-up, obsolete snapshot and 1000 shuffled duplicate deliveries\n";
+    std::cout<<"PASS: price priority, FIFO, partial fills, cancel, source time, 64-bit prices, gap buffering, snapshot catch-up, obsolete snapshot and 1000 shuffled duplicate deliveries\n";
 } catch(const std::exception& e) {std::cerr<<"FAIL: "<<e.what()<<'\n';return 1;}
