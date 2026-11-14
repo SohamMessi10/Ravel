@@ -30,9 +30,11 @@ Milestone 1: timed replay.
 
 | Milestone 1.7: replay loop with interval metrics, in memory (#21) | VERIFIED | 6/6 CTest tests in all presets; hand-calculated durations match; making latent states count as correct made `replay_tests` fail at the latent check (`replay_test.cpp:74`); demo trace `IDENTICAL` |
 
+| Milestone 1.8a: timed command input, run outputs and the `ravel-run` CLI (#23) | VERIFIED | 7/7 CTest tests in all presets; changing the FNV prime made `export_tests` fail; demo trace `IDENTICAL` |
+
 ## In progress
 
-- Nothing open. Next is milestone 1.8.
+- Nothing open. Next is milestone 1.8b.
 
 ## Open verification items
 
@@ -42,7 +44,7 @@ Milestone 1: timed replay.
 
 Milestone 1, remaining issues, one per reviewable unit:
 
-8. Timed command input, run outputs (`trace.csv`, `deliveries.csv`, `summary.json`, `manifest.json`), the CLI runner, the canonical scenario (loss at 10 ms, detection at 13 ms, recovery at 25 ms), its golden test and `docs/HAND_CHECK.md`
+8. (1.8b) The canonical scenario (loss at 10 ms, detection at 13 ms, recovery at 25 ms), its golden test and `docs/HAND_CHECK.md`
 9. Determinism test: run the scenario twice and byte-compare the outputs
 
 ## Known bugs
@@ -78,6 +80,8 @@ Checked against official docs on 2026-11-13. Reuse these instead of re-checking;
 | splitmix64: increment `0x9e3779b97f4a7c15`, shifts 30/27/31, multipliers `0xbf58476d1ce4e5b9` and `0x94d049bb133111eb`; public domain | https://prng.di.unimi.it/splitmix64.c |
 | splitmix64, seed 1234567, first five outputs: 6457827717110365317, 3203168211198807973, 9817491932198370423, 4593380528125082431, 16408922859458223821 | https://rosettacode.org/wiki/Pseudo-random_numbers/Splitmix64 |
 | Homebrew `cmake` 4.5.0 has an arm64 Sequoia bottle | https://formulae.brew.sh/formula/cmake |
+| FNV-1a 64: offset basis `0xcbf29ce484222325`, prime `0x100000001b3`, xor then multiply. Test vectors "" → `cbf29ce484222325`, "a" → `af63dc4c8601ec8c`, "foobar" → `85944171f73967e8` (the vectors were read from a summary; `export_tests` passes against them) | https://datatracker.ietf.org/doc/html/draft-eastlake-fnv (RFC 9923) |
+| `configure_file(<in> <out> @ONLY)` replaces only `@VAR@`, rewrites the output only when its content changes, and treats a relative output path as relative to `CMAKE_CURRENT_BINARY_DIR` | https://cmake.org/cmake/help/latest/command/configure_file.html |
 | nlohmann/json latest stable is v3.12.0 (2025-04-11); `json.tar.xz` SHA-256 is `42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa` | https://github.com/nlohmann/json/releases |
 | nlohmann/json FetchContent: `FetchContent_Declare(json URL …/v3.12.0/json.tar.xz)`, `FetchContent_MakeAvailable(json)`, link `nlohmann_json::nlohmann_json`; the archive has no tests, so they are not built | https://json.nlohmann.me/integration/cmake/ |
 | `FetchContent_MakeAvailable` added in 3.14; the `SYSTEM` keyword in 3.25; `EXCLUDE_FROM_ALL` in 3.28 | https://cmake.org/cmake/help/latest/module/FetchContent.html |
@@ -110,6 +114,8 @@ Checked against official docs on 2026-11-13. Reuse these instead of re-checking;
 | Scenario schema v1: every field required, times in integer ns, input identified by path plus FNV-1a 64-bit hash, `faults` limited to `drop` for now | Strictness catches typos. FNV-1a detects a changed input file; it is an identity check, not a security hash. |
 | nlohmann/json pinned by URL plus `URL_HASH SHA256` and fetched as `SYSTEM`; parsing lives in one static library | A changed or tampered archive fails the configure step; the library's headers do not trip our warnings; only one file includes the JSON headers |
 | `snapshot_replay` captures the snapshot from the reference at the moment the gap is detected; it arrives after `snapshot_delay_ns`, and another is requested if a gap remains after installing it | The simplest snapshot service. Delayed and stale snapshots are milestone 3 work. |
+| `ravel-run` takes the git commit as an argument, and resolves scenario paths relative to the current directory (the repository root) | A commit baked in at configure time goes stale after the next commit. Run outputs never contain absolute paths. |
+| Every policy's run is paired with a control: the same scenario with the faults cleared. `summary.json` reports run, control and `effect_vs_control` | The brief requires each fault's effect to be measured against a no-fault run with the same latency |
 | Reconstruction checks rebuild the reference from sequence 1 up to the consumer's applied sequence | Simple and obviously correct, at O(n) per check. Revisit at LOBSTER scale if profiling shows it matters. |
 | Processing never goes backwards: a new key must be greater than the last processed key | Metrics come from change points in processed order, so a late insertion must not rewrite what happened at an earlier key (`SEMANTICS.md` §3) |
 | `Book` stores FIFO ladders plus an ID index; equality compares only the ladders | Queue order is part of correctness. The index is derived data, so it is excluded from equality and guarded by an "out of sync" error. |
@@ -119,6 +125,7 @@ Checked against official docs on 2026-11-13. Reuse these instead of re-checking;
 | Suite | Last result | Where |
 |---|---|---|
 | CTest `engine_tests` (matcher oracle, 10,000 submissions from `SplitMix64(42)` with FIFO ladders checked after each; source time; 64-bit prices; FIFO equality; receiver cases; 1,000 shuffled duplicate deliveries) | PASS in `debug`, `release`, `asan` | Apple M3, Apple clang 17.0.0, macOS (Darwin 24.5.0), CMake 4.5.0 |
+| CTest `export_tests` (FNV-1a vectors; timed-command errors with line numbers; exact `trace.csv` and `deliveries.csv` text; summary run, control and effect; manifest fields) | PASS in `debug`, `release`, `asan` | Same machine |
 | CTest `replay_tests` (lost cancel under each policy; lost deep bid gives latent time; 0 ms and 1 ms no-fault controls; undetected at observation end; determinism; durations sum to the window) | PASS in `debug`, `release`, `asan` | Same machine |
 | CTest `scenario_tests` (valid file plus one negative case per strictness rule) | PASS in `debug`, `release`, `asan` | Same machine |
 | CTest `random_tests` (splitmix64 known answers for seeds 1234567 and 0; bounded draws; shuffle) | PASS in `debug`, `release`, `asan` | Same machine |

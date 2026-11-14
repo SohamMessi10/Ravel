@@ -19,15 +19,23 @@ FetchContent_Declare(json
 FetchContent_MakeAvailable(json)
 
 # Directory-wide options apply only to targets created after this point.
+set(RAVEL_COMPILE_OPTIONS)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-  add_compile_options(-Wall -Wextra -pedantic)
+  list(APPEND RAVEL_COMPILE_OPTIONS -Wall -Wextra -pedantic)
   if(RAVEL_SANITIZE)
-    add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer)
+    list(APPEND RAVEL_COMPILE_OPTIONS -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address,undefined)
   endif()
 elseif(RAVEL_SANITIZE)
   message(FATAL_ERROR "RAVEL_SANITIZE requires Clang, AppleClang or GCC")
 endif()
+add_compile_options(${RAVEL_COMPILE_OPTIONS})
+
+# Build facts recorded in every run manifest.
+string(TOUPPER "${CMAKE_BUILD_TYPE}" RAVEL_BUILD_TYPE_UPPER)
+list(JOIN RAVEL_COMPILE_OPTIONS " " RAVEL_OPTIONS_STRING)
+string(STRIP "-std=c++${CMAKE_CXX_STANDARD} ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${RAVEL_BUILD_TYPE_UPPER}} ${RAVEL_OPTIONS_STRING}" RAVEL_FLAGS_STRING)
+configure_file(cmake/build_info.hpp.in generated/build_info.hpp @ONLY)
 
 add_executable(ravel src/main.cpp)
 add_executable(ravel-test tests/test.cpp)
@@ -43,12 +51,21 @@ add_library(ravel-replay STATIC src/replay.cpp)
 add_executable(replay-test tests/replay_test.cpp)
 target_link_libraries(replay-test PRIVATE ravel-replay)
 
+add_library(ravel-io STATIC src/input.cpp src/export.cpp)
+target_link_libraries(ravel-io PRIVATE nlohmann_json::nlohmann_json)
+add_executable(ravel-run src/run_main.cpp)
+target_include_directories(ravel-run PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_link_libraries(ravel-run PRIVATE ravel-io ravel-replay ravel-scenario)
+add_executable(export-test tests/export_test.cpp)
+target_link_libraries(export-test PRIVATE ravel-io ravel-replay nlohmann_json::nlohmann_json)
+
 enable_testing()
 add_test(NAME engine_tests COMMAND ravel-test)
 add_test(NAME random_tests COMMAND random-test)
 add_test(NAME scheduler_tests COMMAND scheduler-test)
 add_test(NAME scenario_tests COMMAND scenario-test)
 add_test(NAME replay_tests COMMAND replay-test)
+add_test(NAME export_tests COMMAND export-test)
 
 # The demo trace must stay byte-identical to the golden file.
 add_test(NAME demo_golden_trace
